@@ -250,6 +250,7 @@ def analyse_symbol(
         "smc": smc_feat,
         "performance": stats,
         "trading_mode": smc_feat.get("trading_mode", "SWING"),
+        "sector": __import__("src.data", fromlist=["TICKER_SECTORS"]).TICKER_SECTORS.get(symbol, "Other"),
         "data_source": market_data.get("source", "unknown"),
     }
 
@@ -321,7 +322,7 @@ def run_realtime_loop(
         If True, pause outside VN trading hours. Default True.
     """
     if symbols is None:
-        symbols = ["VCB", "VIC", "HPG", "FPT", "MWG"]
+        symbols = ["VCB", "VIC", "VHM", "VRE", "HPG", "FPT", "MWG", "VNM", "LCG", "ACB", "SSI", "CTG", "CII", "MSN", "MBB", "TCB"]
 
     logger.info("Real-time loop started | Symbols: %s | Interval: %ds", symbols, interval_seconds)
     print(f"\n{'='*60}")
@@ -385,6 +386,49 @@ def run_realtime_loop(
 
             except Exception as exc:
                 logger.error("Lỗi phân tích %s: %s", symbol, exc)
+            
+            # Thêm độ trễ nhỏ để tránh Rate Limit của vnstock (Guest: 20 req/min)
+            time.sleep(3)
 
-        print(f"\nScan hoan tat. Cho {interval_seconds}s...\n{'---'*17}")
-        time.sleep(interval_seconds)
+            # ---- Sector Flow Analysis ----
+            sector_data = {}
+            for r in scan_results:
+                sec = r.get("sector", "Other")
+                if sec not in sector_data:
+                    sector_data[sec] = {"change": [], "vol": [], "count": 0}
+                
+                change = r.get("tech", {}).get("price_change_pct", 0)
+                vol = r.get("tech", {}).get("vol_ratio", 1.0)
+                
+                sector_data[sec]["change"].append(change)
+                sector_data[sec]["vol"].append(vol)
+                sector_data[sec]["count"] += 1
+            
+            final_sectors = {}
+            for sec, vals in sector_data.items():
+                avg_change = sum(vals["change"]) / len(vals["change"])
+                avg_vol = sum(vals["vol"]) / len(vals["vol"])
+                
+                # Flow label: Cường độ dòng tiền
+                if avg_change > 0.5 and avg_vol > 1.2: flow = "LEADING (Hut tien)"
+                elif avg_change > -0.2 and avg_vol > 1.0: flow = "IMPROVING (Tich luy)"
+                elif avg_change < -0.5: flow = "LAGGING (Suy yeu)"
+                else: flow = "NEUTRAL"
+                
+                final_sectors[sec] = {
+                    "avg_change": round(avg_change, 2),
+                    "avg_vol": round(avg_vol, 2),
+                    "count": vals["count"],
+                    "flow": flow
+                }
+            
+            # Broadcast sector update
+            if broadcast_fn is not None:
+                try:
+                    asyncio.get_event_loop().run_until_complete(
+                        broadcast_fn({"type": "sector_update", "data": final_sectors})
+                    )
+                except Exception: pass
+
+            print(f"\nScan hoan tat. Cho {interval_seconds}s...\n{'---'*17}")
+            time.sleep(interval_seconds)

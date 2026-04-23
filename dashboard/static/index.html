@@ -338,6 +338,19 @@
     .smc-badge.bos   { color: var(--blue); border-color: rgba(96,165,250,0.3); }
     .smc-badge.choch { color: var(--purple); border-color: rgba(167,139,250,0.3); }
     .smc-badge.sweep { color: var(--yellow); border-color: rgba(246,201,14,0.3); font-weight: 700; }
+    /* ======================= SECTOR FLOW ======================= */
+    .sector-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .sector-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; position: relative;
+    }
+    .sector-name { font-size: 0.85rem; font-weight: 700; color: var(--blue); margin-bottom: 4px; }
+    .sector-flow { font-size: 0.7rem; font-weight: 600; margin-bottom: 8px; }
+    .sector-flow.leading   { color: var(--green); }
+    .sector-flow.improving { color: var(--blue); }
+    .sector-flow.lagging   { color: var(--red); }
+    
+    .sector-stats { display: flex; justify-content: space-between; font-size: 0.72rem; }
   </style>
 </head>
 <body>
@@ -362,6 +375,16 @@
 
 <!-- ======================= MAIN ======================= -->
 <div class="main-container">
+
+  <!-- Sector Flow Panel -->
+  <section>
+    <div class="section-title">🌊 Theo dõi dòng tiền nhóm ngành (Sector Flow)</div>
+    <div class="sector-grid" id="sector-grid">
+      <div class="empty-state" style="grid-column:1/-1; padding: 20px;">
+        <p style="font-size: 0.75rem;">Đang tính toán dòng tiền ngành...</p>
+      </div>
+    </div>
+  </section>
 
   <!-- Top Stats -->
   <section>
@@ -681,6 +704,10 @@ function connectWS() {
         }
         renderTickers();
       }
+      
+      if (msg.type === 'sector_update' && msg.data) {
+        renderSectors(msg.data);
+      }
 
       if (msg.type === 'state' && msg.data) {
         Object.assign(state.results, msg.data);
@@ -700,6 +727,30 @@ function connectWS() {
   };
 
   ws.onerror = (e) => console.error('WS error:', e);
+}
+
+/* ======================= RENDER SECTORS ======================= */
+function renderSectors(data) {
+  const grid = document.getElementById('sector-grid');
+  grid.innerHTML = '';
+  
+  Object.entries(data).sort((a,b) => b[1].avg_change - a[1].avg_change).forEach(([name, d]) => {
+    const flowClass = d.flow.toLowerCase().includes('leading') ? 'leading' : 
+                      d.flow.toLowerCase().includes('improving') ? 'improving' : 
+                      d.flow.toLowerCase().includes('lagging') ? 'lagging' : '';
+    
+    const card = document.createElement('div');
+    card.className = 'sector-card fade-in';
+    card.innerHTML = `
+      <div class="sector-name">${name} <span style="font-size:0.65rem;color:var(--text-muted)">(${d.count} mã)</span></div>
+      <div class="sector-flow ${flowClass}">${d.flow}</div>
+      <div class="sector-stats">
+        <span>Thay đổi: <b style="color:${d.avg_change>0?'var(--green)':'var(--red)'}">${d.avg_change>0?'+':''}${d.avg_change}%</b></span>
+        <span>Vol Ratio: <b>${d.avg_vol}x</b></span>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
 }
 
 /* ======================= TOAST ======================= */

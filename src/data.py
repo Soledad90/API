@@ -30,6 +30,16 @@ _TRADING_HOURS = [
     ("13:00", "14:45"),   # Phiên chiều (ATC kết thúc 14:45)
 ]
 
+# Mapping Ticker -> Sector cho mục đích phân tích dòng tiền
+TICKER_SECTORS = {
+    "VCB": "Banking", "ACB": "Banking", "CTG": "Banking", "MBB": "Banking", "TCB": "Banking", "STB": "Banking",
+    "VIC": "Real Estate", "VHM": "Real Estate", "VRE": "Real Estate", "LCG": "Real Estate", "CII": "Real Estate", "NVL": "Real Estate", "DXG": "Real Estate",
+    "HPG": "Steel", "HSG": "Steel", "NKG": "Steel",
+    "FPT": "Technology", "CTR": "Technology",
+    "MWG": "Retail", "VNM": "Consumer", "MSN": "Consumer", "PNJ": "Retail",
+    "SSI": "Securities", "VND": "Securities", "VCI": "Securities", "HCM": "Securities"
+}
+
 
 # ---------------------------------------------------------------------------
 # Trading session helpers
