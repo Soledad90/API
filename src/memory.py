@@ -13,6 +13,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+from src.utils import NumpyEncoder
+
+
+
 DEFAULT_MEMORY_FILE = os.path.join(
     os.path.dirname(__file__), "..", "memory", "trade_history.json"
 )
@@ -59,7 +63,7 @@ def save_memory(
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
-        json.dump(history, fh, indent=2)
+        json.dump(history, fh, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
 
 def compute_performance_stats(

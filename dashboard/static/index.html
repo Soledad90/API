@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VN Stock AI Agent — Real-Time Dashboard</title>
+  <meta name="description" content="Dashboard phân tích chứng khoán Việt Nam theo thời gian thực bằng AI" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ======================= DESIGN TOKENS ======================= */
+    :root {
+      --bg-base:      #0a0d14;
+      --bg-card:      #111827;
+      --bg-card-2:    #1a2234;
+      --bg-glass:     rgba(255,255,255,0.04);
+      --border:       rgba(255,255,255,0.08);
+      --border-glow:  rgba(99,179,237,0.3);
+
+      --text-primary:   #f0f4ff;
+      --text-secondary: #8896b3;
+      --text-muted:     #4a5568;
+
+      --green:   #22d07a;
+      --green-bg: rgba(34,208,122,0.12);
+      --red:     #f75555;
+      --red-bg:  rgba(247,85,85,0.12);
+      --yellow:  #f6c90e;
+      --yellow-bg: rgba(246,201,14,0.1);
+      --blue:    #60a5fa;
+      --blue-bg: rgba(96,165,250,0.1);
+      --purple:  #a78bfa;
+
+      --accent: #3b82f6;
+      --accent-glow: 0 0 20px rgba(59,130,246,0.4);
+
+      --radius: 14px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    /* ======================= RESET ======================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ======================= BACKGROUND ======================= */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: -1;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(59,130,246,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(167,139,250,0.06) 0%, transparent 60%),
+        var(--bg-base);
+    }
+
+    /* ======================= SCROLLBAR ======================= */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ======================= HEADER ======================= */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,13,20,0.8);
+      backdrop-filter: blur(20px);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .logo-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: linear-gradient(135deg, #3b82f6, #a78bfa);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      box-shadow: var(--accent-glow);
+    }
+    .logo-text h1 { font-size: 1rem; font-weight: 700; letter-spacing: -0.02em; }
+    .logo-text p  { font-size: 0.72rem; color: var(--text-secondary); }
+
+    .header-right { display: flex; align-items: center; gap: 16px; }
+
+    .status-dot {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; color: var(--text-secondary);
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.3s;
+    }
+    .dot.live {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .time-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      padding: 4px 12px; border-radius: 20px;
+    }
+
+    /* ======================= LAYOUT ======================= */
+    .main-container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px 28px;
+    }
+
+    /* ======================= TOP STATS ======================= */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      transition: border-color 0.2s, transform 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .stat-card:hover::before { opacity: 1; }
+    .stat-card:hover { border-color: var(--border-glow); transform: translateY(-2px); }
+    .stat-label { font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .stat-value { font-size: 1.6rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .stat-sub   { font-size: 0.72rem; color: var(--text-secondary); margin-top: 4px; }
+
+    /* ======================= MAIN GRID ======================= */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 20px;
+    }
+    @media (max-width: 1100px) { .content-grid { grid-template-columns: 1fr; } }
+
+    /* ======================= CARDS ======================= */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 0.85rem; font-weight: 600;
+      color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em;
+    }
+
+    /* ======================= TICKER GRID ======================= */
+    .tickers-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .ticker-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      transition: all 0.25s;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .ticker-card:hover { transform: translateY(-3px); border-color: var(--border-glow); }
+    .ticker-card.buy  { border-left: 3px solid var(--green); }
+    .ticker-card.sell { border-left: 3px solid var(--red); }
+    .ticker-card.watch { border-left: 3px solid var(--yellow); }
+    .ticker-card.no_trade { border-left: 3px solid var(--text-muted); }
+
+    .ticker-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .ticker-symbol { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.05em; }
+    .ticker-price  {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem; font-weight: 500;
+    }
+
+    .decision-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 12px; border-radius: 20px;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
+      margin-bottom: 10px;
+    }
+    .decision-badge.BUY      { background: var(--green-bg);  color: var(--green);  }
+    .decision-badge.SELL     { background: var(--red-bg);    color: var(--red);    }
+    .decision-badge.WATCH    { background: var(--yellow-bg); color: var(--yellow); }
+    .decision-badge.NO_TRADE { background: var(--bg-glass);  color: var(--text-muted); }
+
+    .ticker-indicators {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
+    }
+    .ind-item {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.72rem; padding: 2px 0;
+    }
+    .ind-label { color: var(--text-secondary); }
+    .ind-value { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+
+    .confidence-bar-wrap { margin: 10px 0; }
+    .confidence-bar-bg {
+      height: 4px; border-radius: 2px;
+      background: var(--border); overflow: hidden;
+    }
+    .confidence-bar-fill {
+      height: 100%; border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+    .confidence-bar-fill.high { background: var(--green); }
+    .confidence-bar-fill.med  { background: var(--yellow); }
+    .confidence-bar-fill.low  { background: var(--red); }
+
+    .ticker-reasoning {
+      font-size: 0.7rem; color: var(--text-secondary);
+      margin-top: 8px; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+
+    /* ======================= CHART ======================= */
+    .chart-wrap { position: relative; height: 280px; }
+
+    /* ======================= ALERTS ======================= */
+    .alerts-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+    .alert-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 12px; border-radius: var(--radius-sm);
+      background: var(--bg-glass); border: 1px solid var(--border);
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .alert-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+    .alert-content { flex: 1; min-width: 0; }
+    .alert-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 2px; }
+    .alert-body  { font-size: 0.7rem; color: var(--text-secondary); line-height: 1.4; }
+    .alert-time  { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--text-muted); flex-shrink: 0; }
+
+    /* ======================= MARKET OVERVIEW ======================= */
+    .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .market-item {
+      background: var(--bg-card-2); border-radius: var(--radius-sm);
+      padding: 12px; border: 1px solid var(--border);
+    }
+    .market-item .label { font-size: 0.68rem; color: var(--text-secondary); margin-bottom: 4px; }
+    .market-item .val { font-size: 0.95rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+    /* ======================= CONNECTION TOAST ======================= */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 10px 18px;
+      font-size: 0.8rem; color: var(--text-secondary);
+      z-index: 999; opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      transform: translateY(10px);
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ======================= EMPTY STATE ======================= */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 60px 20px; color: var(--text-muted); text-align: center; gap: 12px;
+    }
+    .empty-state .icon { font-size: 3rem; }
+    .empty-state p { font-size: 0.85rem; max-width: 280px; line-height: 1.6; }
+
+    /* ======================= ANIMATE ======================= */
+    .fade-in { animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ======================= SECTION SPACING ======================= */
+    .section-title {
+      font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+    section { margin-bottom: 24px; }
+
+    /* ======================= SMC & MODE BADGES ======================= */
+    .mode-badge {
+      font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .mode-badge.SWING    { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(96,165,250,0.2); }
+    .mode-badge.SCALPING { background: rgba(167,139,250,0.15); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+
+    .smc-container { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+    .smc-badge {
+      font-size: 0.6rem; font-weight: 600; padding: 2px 6px; border-radius: 3px;
+      background: var(--bg-card-2); border: 1px solid var(--border);
+    }
+    .smc-badge.bos   { color: var(--blue); border-color: rgba(96,165,250,0.3); }
+    .smc-badge.choch { color: var(--purple); border-color: rgba(167,139,250,0.3); }
+    .smc-badge.sweep { color: var(--yellow); border-color: rgba(246,201,14,0.3); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<!-- ======================= HEADER ======================= -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">📈</div>
+    <div class="logo-text">
+      <h1>VN Stock AI Agent</h1>
+      <p>Phân tích thị trường chứng khoán Việt Nam theo thời gian thực</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot">
+      <div class="dot" id="ws-dot"></div>
+      <span id="ws-label">Đang kết nối…</span>
+    </div>
+    <div class="time-display" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- ======================= MAIN ======================= -->
+<div class="main-container">
+
+  <!-- Top Stats -->
+  <section>
+    <div class="stats-grid" id="top-stats">
+      <div class="stat-card">
+        <div class="stat-label">Số mã theo dõi</div>
+        <div class="stat-value" id="stat-symbols" style="color:var(--blue)">--</div>
+        <div class="stat-sub">HOSE / HNX</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Tín hiệu BUY</div>
+        <div class="stat-value" id="stat-buy" style="color:var(--green)">0</div>
+        <div class="stat-sub">Đề nghị mua</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Tín hiệu SELL</div>
+        <div class="stat-value" id="stat-sell" style="color:var(--red)">0</div>
+        <div class="stat-sub">Đề nghị bán</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Theo dõi (WATCH)</div>
+        <div class="stat-value" id="stat-watch" style="color:var(--yellow)">0</div>
+        <div class="stat-sub">Quan sát thêm</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cập nhật lúc</div>
+        <div class="stat-value" id="stat-last" style="font-size:1rem; color:var(--text-secondary)">--:--</div>
+        <div class="stat-sub">Lần scan gần nhất</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ticker Cards -->
+  <section>
+    <div class="section-title">🔍 Phân tích chi tiết từng mã</div>
+    <div class="tickers-grid" id="tickers-grid">
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="icon">🤖</div>
+        <p>Agent đang khởi động và chờ dữ liệu thị trường…<br/>Kết quả sẽ hiển thị ở đây sau lần scan đầu tiên.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Content Grid -->
+  <div class="content-grid">
+
+    <!-- Left: Chart + Sentiment -->
+    <div>
+      <section>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📊 Phân phối tín hiệu</span>
+            <span style="font-size:0.72rem;color:var(--text-muted)" id="chart-subtitle">Chờ dữ liệu…</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="signal-chart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🌡️ Market Breadth</span>
+          </div>
+          <div class="market-grid" id="market-grid">
+            <div class="market-item"><div class="label">Market Regime</div><div class="val" id="m-regime">--</div></div>
+            <div class="market-item"><div class="label">Breadth %</div><div class="val" id="m-breadth">--</div></div>
+            <div class="market-item"><div class="label">Sentiment</div><div class="val" id="m-sentiment">--</div></div>
+            <div class="market-item"><div class="label">Nguồn dữ liệu</div><div class="val" id="m-source">--</div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right: Alerts Feed -->
+    <div>
+      <section>
+        <div class="card" style="height:100%">
+          <div class="card-header">
+            <span class="card-title">🔔 Alerts & Tín hiệu</span>
+            <button id="clear-alerts" style="background:none;border:none;color:var(--text-muted);font-size:0.72rem;cursor:pointer;">Xoá</button>
+          </div>
+          <div class="alerts-list" id="alerts-list">
+            <div class="empty-state" style="padding:40px 20px">
+              <div class="icon">🔕</div>
+              <p>Chưa có tín hiệu nào.<br/>Alerts sẽ hiển thị khi agent phát hiện cơ hội.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast">✅ Đã kết nối WebSocket</div>
+
+<script>
+/* ======================= CLOCK ======================= */
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('vi-VN');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ======================= CHART ======================= */
+const ctx = document.getElementById('signal-chart').getContext('2d');
+let signalChart = new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    labels: ['BUY', 'SELL', 'WATCH', 'NO TRADE'],
+    datasets: [{
+      data: [0, 0, 0, 0],
+      backgroundColor: ['#22d07a22', '#f7555522', '#f6c90e22', '#4a556822'],
+      borderColor:     ['#22d07a',   '#f75555',   '#f6c90e',   '#4a5568'],
+      borderWidth: 2,
+      hoverOffset: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: { color: '#8896b3', font: { family: 'Inter', size: 12 }, padding: 16 }
+      }
+    },
+    cutout: '65%',
+  }
+});
+
+/* ======================= STATE ======================= */
+const state = {
+  results: {},
+  alerts: [],
+};
+
+/* ======================= HELPERS ======================= */
+function fmt(num, digits=0) {
+  if (num == null || isNaN(num)) return '--';
+  return Number(num).toLocaleString('vi-VN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function decisionEmoji(d) {
+  return { BUY: '🟢', SELL: '🔴', WATCH: '🟡', NO_TRADE: '⚪' }[d] || '❓';
+}
+
+function confidenceClass(c) {
+  if (c >= 0.7) return 'high';
+  if (c >= 0.5) return 'med';
+  return 'low';
+}
+
+/* ======================= RENDER TICKERS ======================= */
+function renderTickers() {
+  const grid = document.getElementById('tickers-grid');
+  const entries = Object.values(state.results);
+
+  if (entries.length === 0) return;
+
+  grid.innerHTML = '';
+  let buyCount = 0, sellCount = 0, watchCount = 0;
+
+  entries.forEach(r => {
+    const d = r.decision || {};
+    const tech = r.tech || {};
+    const smc = r.smc || {};
+    const dec = d.decision || 'NO_TRADE';
+    const conf = d.confidence || 0;
+    const confClass = confidenceClass(conf);
+    const tradingMode = r.trading_mode || 'SWING';
+
+    if (dec === 'BUY')   buyCount++;
+    if (dec === 'SELL')  sellCount++;
+    if (dec === 'WATCH') watchCount++;
+
+    const card = document.createElement('div');
+    card.className = `ticker-card ${dec.toLowerCase()} fade-in`;
+    card.id = `ticker-${r.symbol}`;
+    
+    // SMC Badges
+    let smcBadges = '';
+    if (smc.bos) smcBadges += `<span class="smc-badge bos">${smc.bos}</span>`;
+    if (smc.choch) smcBadges += `<span class="smc-badge choch">${smc.choch}</span>`;
+    if (smc.liquidity_sweep) smcBadges += `<span class="smc-badge sweep">${smc.liquidity_sweep}</span>`;
+
+    card.innerHTML = `
+      <div class="ticker-header">
+        <span class="ticker-symbol">${r.symbol}</span>
+        <span class="ticker-price">${fmt(r.price)} đ</span>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+        <div class="decision-badge ${dec}">${decisionEmoji(dec)} ${dec.replace('_', ' ')}</div>
+        <div class="mode-badge ${tradingMode}">${tradingMode}</div>
+      </div>
+      
+      <div class="smc-container">${smcBadges}</div>
+
+      <div class="confidence-bar-wrap">
+        <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-secondary);margin-bottom:4px">
+          <span>Confidence</span><span>${(conf*100).toFixed(0)}%</span>
+        </div>
+        <div class="confidence-bar-bg">
+          <div class="confidence-bar-fill ${confClass}" style="width:${(conf*100).toFixed(0)}%"></div>
+        </div>
+      </div>
+      <div class="ticker-indicators">
+        <div class="ind-item"><span class="ind-label">SMC Struct</span><span class="ind-value" style="color:var(--blue)">${smc.structure||'--'}</span></div>
+        <div class="ind-item"><span class="ind-label">FVG</span><span class="ind-value">${(smc.fvgs||[]).length > 0 ? 'Detected' : 'None'}</span></div>
+        <div class="ind-item"><span class="ind-label">RSI</span><span class="ind-value" style="color:${tech.rsi_zone==='OVERBOUGHT'?'var(--red)':tech.rsi_zone==='OVERSOLD'?'var(--green)':'var(--text-primary)'}">${tech.rsi||'--'}</span></div>
+        <div class="ind-item"><span class="ind-label">MA Trend</span><span class="ind-value" style="font-size:0.66rem;color:${tech.ma_signal?.includes('GOLDEN')||tech.ma_signal==='BULLISH'?'var(--green)':'var(--red)'}">${tech.ma_signal||'--'}</span></div>
+        <div class="ind-item"><span class="ind-label">Volatility</span><span class="ind-value">${smc.volatility_score||'1.0'}x</span></div>
+        <div class="ind-item"><span class="ind-label">Thay đổi</span><span class="ind-value" style="color:${tech.price_change_pct>0?'var(--green)':'var(--red)'}">${tech.price_change_pct!=null?(tech.price_change_pct>0?'+':'')+fmt(tech.price_change_pct,2)+'%':'--'}</span></div>
+      </div>
+      <div class="ticker-reasoning">${d.reasoning || ''}</div>
+    `;
+    grid.appendChild(card);
+  });
+
+  // Update stat counters
+  document.getElementById('stat-symbols').textContent = entries.length;
+  document.getElementById('stat-buy').textContent   = buyCount;
+  document.getElementById('stat-sell').textContent  = sellCount;
+  document.getElementById('stat-watch').textContent = watchCount;
+
+  // Update chart
+  signalChart.data.datasets[0].data = [buyCount, sellCount, watchCount, entries.length - buyCount - sellCount - watchCount];
+  signalChart.update('active');
+  document.getElementById('chart-subtitle').textContent = `${entries.length} mã — ${new Date().toLocaleTimeString('vi-VN')}`;
+
+  // Update market overview from first result
+  const first = entries[0];
+  if (first) {
+    const m = first.market || {};
+    const s = first.sentiment || {};
+    document.getElementById('m-regime').textContent = m.market_regime || '--';
+    document.getElementById('m-breadth').textContent = m.breadth_pct != null ? (m.breadth_pct*100).toFixed(1)+'%' : '--';
+    document.getElementById('m-sentiment').textContent = s.sentiment_label || '--';
+    document.getElementById('m-source').textContent = first.data_source || '--';
+  }
+}
+
+/* ======================= ALERTS ======================= */
+function addAlert(result) {
+  const dec = result.decision?.decision || 'NO_TRADE';
+  if (!['BUY','SELL'].includes(dec)) return; // Chỉ alert BUY/SELL
+
+  const conf = result.decision?.confidence || 0;
+  const icon = dec === 'BUY' ? '🟢' : '🔴';
+  const color = dec === 'BUY' ? 'var(--green)' : 'var(--red)';
+  const time = new Date().toLocaleTimeString('vi-VN');
+  const reasoning = (result.decision?.reasoning || '').slice(0, 120);
+
+  const alertEl = document.createElement('div');
+  alertEl.className = 'alert-item fade-in';
+  alertEl.innerHTML = `
+    <div class="alert-icon">${icon}</div>
+    <div class="alert-content">
+      <div class="alert-title" style="color:${color}">${result.symbol} — ${dec} (${(conf*100).toFixed(0)}%)</div>
+      <div class="alert-body">${reasoning}</div>
+    </div>
+    <div class="alert-time">${time}</div>
+  `;
+
+  const list = document.getElementById('alerts-list');
+  // Remove empty state
+  list.querySelectorAll('.empty-state').forEach(e => e.remove());
+  list.insertBefore(alertEl, list.firstChild);
+
+  // Keep max 30 alerts
+  while (list.children.length > 30) list.removeChild(list.lastChild);
+
+  state.alerts.unshift({ symbol: result.symbol, dec, conf, time, reasoning });
+}
+
+document.getElementById('clear-alerts').onclick = () => {
+  document.getElementById('alerts-list').innerHTML = `
+    <div class="empty-state" style="padding:40px 20px">
+      <div class="icon">🔕</div><p>Chưa có tín hiệu nào.</p>
+    </div>`;
+  state.alerts = [];
+};
+
+/* ======================= WEBSOCKET ======================= */
+let ws, wsRetries = 0;
+
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen = () => {
+    wsRetries = 0;
+    document.getElementById('ws-dot').classList.add('live');
+    document.getElementById('ws-label').textContent = 'Kết nối real-time';
+    showToast('✅ Đã kết nối WebSocket');
+
+    // Heartbeat
+    setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 20000);
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'pong') return;
+
+      if (msg.type === 'update' && msg.data) {
+        state.results[msg.symbol] = msg.data;
+        addAlert(msg.data);
+
+        // Update last scan time
+        const ts = msg.data.timestamp;
+        if (ts) {
+          const t = new Date(ts).toLocaleTimeString('vi-VN');
+          document.getElementById('stat-last').textContent = t;
+        }
+        renderTickers();
+      }
+
+      if (msg.type === 'state' && msg.data) {
+        Object.assign(state.results, msg.data);
+        renderTickers();
+      }
+    } catch (e) {
+      console.error('WS parse error:', e);
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-dot').classList.remove('live');
+    document.getElementById('ws-label').textContent = 'Mất kết nối…';
+    wsRetries++;
+    const delay = Math.min(3000 * wsRetries, 30000);
+    setTimeout(connectWS, delay);
+  };
+
+  ws.onerror = (e) => console.error('WS error:', e);
+}
+
+/* ======================= TOAST ======================= */
+function showToast(msg, dur=3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+/* ======================= INIT ======================= */
+connectWS();
+
+// Poll REST API periodically as backup
+async function pollAPI() {
+  try {
+    const res = await fetch('/api/results');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Object.keys(data).length > 0) {
+      Object.assign(state.results, data);
+      renderTickers();
+    }
+  } catch(e) {}
+}
+setInterval(pollAPI, 15000);
+pollAPI();
+</script>
+</body>
+</html>
